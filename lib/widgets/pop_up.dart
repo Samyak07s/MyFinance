@@ -50,7 +50,7 @@ class PopUP {
 
   Future<void> _deleteCategory(
       BuildContext context, ExpenseCategoryModel category) async {
-    await CategoryService().deleteCategory(category.id);
+    await CategoryService().deleteCategory(category.id, category.name);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text("${category.name} deleted")),
     );

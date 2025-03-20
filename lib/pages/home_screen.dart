@@ -124,7 +124,7 @@ class _HomePageState extends State<HomePage> {
       );
     }
 
-    return sectionDataList;
+    return sectionDataList; // Make sure to return the list
   }
 
   @override
@@ -220,44 +220,34 @@ class _HomePageState extends State<HomePage> {
                     SizedBox(
                       height: 180,
                       child: FutureBuilder<List<PieChartSectionData>>(
-                        // Fetch colors for each category before building the PieChart
                         future: _fetchCategoryColors(
                             expenseByCategory.keys.toList()),
                         builder: (context, snapshot) {
                           if (snapshot.connectionState ==
                               ConnectionState.waiting) {
-                            return Center(child: CircularProgressIndicator());
+                            return const Center(
+                                child: CircularProgressIndicator());
                           }
 
                           if (snapshot.hasError) {
-                            return Center(child: Text('Error fetching data.'));
+                            return const Center(
+                                child: Text('Error fetching data.'));
                           }
 
-                          if (snapshot.hasData) {
-                            return PieChart(
-                              PieChartData(
-                                sections: snapshot.data!.map((sectionData) {
-                                  return PieChartSectionData(
-                                    title: sectionData
-                                        .title, // Category name as title
-                                    value: sectionData
-                                        .value, // Amount spent in the category
-                                    color: sectionData.color, // Category color
-                                    titleStyle: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  );
-                                }).toList(),
-                                borderData: FlBorderData(show: false),
-                                sectionsSpace: 2,
-                                centerSpaceRadius: 40,
-                              ),
-                            );
+                          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                            return const Center(
+                                child: Text('No data available.'));
                           }
 
-                          return Center(child: Text('No data available.'));
+                          return PieChart(
+                            PieChartData(
+                              sections: snapshot
+                                  .data!, // Directly use the processed sections
+                              borderData: FlBorderData(show: false),
+                              sectionsSpace: 2,
+                              centerSpaceRadius: 40,
+                            ),
+                          );
                         },
                       ),
                     ),
