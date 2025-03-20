@@ -43,7 +43,7 @@ class AuthWrapper extends StatelessWidget {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(color: Colors.cyanAccent));
         }
-        if (snapshot.hasData || true) {
+        if (snapshot.hasData ) {
           return const HomePage(); // User is logged in, go to Home Page
         } else {
           return LoginPage(); // Otherwise, show Login Page
