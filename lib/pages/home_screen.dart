@@ -5,8 +5,10 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:my_finance/api/auth/auth_service.dart';
 import 'package:my_finance/api/category_service.dart';
 import 'package:my_finance/helper/colors.dart';
+import 'package:my_finance/models/category_model.dart';
 import 'package:my_finance/pages/add_transction.dart';
 import 'package:my_finance/pages/category_page.dart';
+import 'package:my_finance/pages/extend_chart.dart';
 import 'package:my_finance/pages/transactions_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -199,59 +201,68 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(height: 20),
 
             // **Expense Chart**
-            Card(
-              color: AppColors.backgroundColor,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  children: [
-                    const Text(
-                      "Spending by Category",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => ExpensesByCategoryPage()),
+                );
+              },
+              child: Card(
+                color: AppColors.backgroundColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      const Text(
+                        "Spending by Category",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      height: 180,
-                      child: FutureBuilder<List<PieChartSectionData>>(
-                        future: _fetchCategoryColors(
-                            expenseByCategory.keys.toList()),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return const Center(
-                                child: CircularProgressIndicator());
-                          }
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        height: 180,
+                        child: FutureBuilder<List<PieChartSectionData>>(
+                          future: _fetchCategoryColors(
+                              expenseByCategory.keys.toList()),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState ==
+                                ConnectionState.waiting) {
+                              return const Center(
+                                  child: CircularProgressIndicator());
+                            }
 
-                          if (snapshot.hasError) {
-                            return const Center(
-                                child: Text('Error fetching data.'));
-                          }
+                            if (snapshot.hasError) {
+                              return const Center(
+                                  child: Text('Error fetching data.'));
+                            }
 
-                          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                            return const Center(
-                                child: Text('No data available.'));
-                          }
+                            if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                              return const Center(
+                                  child: Text('No data available.'));
+                            }
 
-                          return PieChart(
-                            PieChartData(
-                              sections: snapshot
-                                  .data!, // Directly use the processed sections
-                              borderData: FlBorderData(show: false),
-                              sectionsSpace: 2,
-                              centerSpaceRadius: 40,
-                            ),
-                          );
-                        },
+                            return PieChart(
+                              PieChartData(
+                                sections: snapshot
+                                    .data!, // Directly use the processed sections
+                                borderData: FlBorderData(show: false),
+                                sectionsSpace: 2,
+                                centerSpaceRadius: 40,
+                              ),
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

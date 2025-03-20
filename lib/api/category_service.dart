@@ -203,4 +203,28 @@ class CategoryService {
       return const Color(0xFF9E9E9E); // Default gray on error
     }
   }
+
+  static Future<Color> getCategoryColor(String category, String userId) async {
+    try {
+      QuerySnapshot categorySnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('categories')
+          .where('name', isEqualTo: category)
+          .get();
+
+      if (categorySnapshot.docs.isNotEmpty) {
+        Map<String, dynamic> data =
+            categorySnapshot.docs.first.data() as Map<String, dynamic>;
+        String hexColor = data["color"];
+
+        return Color(int.parse(hexColor.replaceFirst('#', '0xff')));
+      }
+
+      return const Color(0xFF9E9E9E); // Default gray if category not found
+    } catch (e) {
+      print("❌ Error fetching category color: $e");
+      return const Color(0xFF9E9E9E); // Default gray on error
+    }
+  }
 }
