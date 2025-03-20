@@ -37,6 +37,10 @@ dependencies:
 
   google_sign_in: ^6.2.2
 
+  flutter_iconpicker: ^4.0.1
+
+  flutter_colorpicker: ^1.1.0
+
   # for pie chart
   fl_chart: ^0.63.0
 

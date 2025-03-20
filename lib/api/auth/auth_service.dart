@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -45,14 +46,15 @@ class AuthService {
   }
 
   // 🔹 Google Sign-In
-  static Future<User?> signInWithGoogle() async {
+  static Future<void> signInWithGoogle(BuildContext context) async {
     try {
       final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) return null;
+      if (googleUser == null) return; // User canceled sign-in
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
-      final OAuthCredential credential = GoogleAuthProvider.credential(
+
+      final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
@@ -62,22 +64,59 @@ class AuthService {
       User? user = userCredential.user;
 
       if (user != null) {
-        final userDoc =
-            await _firestore.collection('users').doc(user.uid).get();
-        if (!userDoc.exists) {
-          await _firestore.collection('users').doc(user.uid).set({
-            'name': user.displayName ?? '',
-            'email': user.email,
-            'uid': user.uid,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
+        // Check if the user has a display name
+        if (user.displayName == null || user.displayName!.isEmpty) {
+          _askForUserName(context, user);
+        } else {
+          print('User signed in: ${user.displayName}');
         }
       }
-      return user;
     } catch (e) {
-      print('Error signing in with Google: $e');
-      return null;
+      print('Google Sign-In Error: $e');
     }
+  }
+
+  // 🔹 Show dialog to ask for user name
+  static void _askForUserName(BuildContext context, User user) {
+    TextEditingController nameController = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Force user to enter name
+      builder: (context) {
+        return AlertDialog(
+          title: Text("Enter Your Name"),
+          content: TextField(
+            controller: nameController,
+            decoration: InputDecoration(hintText: "Your Name"),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                String name = nameController.text.trim();
+                if (name.isNotEmpty) {
+                  // Update Firebase Auth Profile
+                  await user.updateDisplayName(name);
+                  await user.reload();
+
+                  // Store in Firestore for future use
+                  await _firestore.collection("users").doc(user.uid).set({
+                    "name": name,
+                    "email": user.email,
+                    "uid": user.uid,
+                    "photoURL": user.photoURL,
+                  });
+
+                  Navigator.pop(context);
+                  print("Name saved: $name");
+                }
+              },
+              child: Text("Save"),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   // 🔹 Logout user
