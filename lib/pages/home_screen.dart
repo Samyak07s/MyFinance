@@ -1,6 +1,9 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:my_finance/api/auth/auth_service.dart';
+import 'package:my_finance/api/category_service.dart';
 import 'package:my_finance/helper/colors.dart';
 import 'package:my_finance/pages/add_transction.dart';
 import 'package:my_finance/pages/category_page.dart';
@@ -15,32 +18,130 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   String userName = "User";
-  double totalBalance = 5000.0;
-  double lastMonthExpense = 1500.0;
-  double lastMonthEarnings = 3000.0;
+  double totalBalance = 0.0;
+  double lastMonthExpense = 0.0;
+  double lastMonthEarnings = 0.0;
+  Map<String, double> expenseByCategory = {};
+  User? currentUser = FirebaseAuth.instance.currentUser;
 
-  Map<String, double> expenseByCategory = {
-    "Food": 500,
-    "Rent": 700,
-    "Entertainment": 300,
-  };
+  @override
+  void initState() {
+    super.initState();
+    fetchUserData();
+    fetchTransactions();
+  }
+
+  /// **Fetch User's Name from Firestore**
+  Future<void> fetchUserData() async {
+    String uid = FirebaseAuth.instance.currentUser?.uid ?? "";
+    if (uid.isEmpty) return;
+
+    DocumentSnapshot userDoc =
+        await FirebaseFirestore.instance.collection("users").doc(uid).get();
+
+    if (userDoc.exists) {
+      setState(() {
+        userName = userDoc["name"] ?? "User";
+      });
+    }
+  }
+
+  /// **Fetch Transactions from Firestore and Calculate Stats**
+  Future<void> fetchTransactions() async {
+    String uid = FirebaseAuth.instance.currentUser?.uid ?? "";
+    if (uid.isEmpty) return;
+
+    QuerySnapshot transactionsSnapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUser?.uid)
+        .collection("transactions")
+        .get();
+    double balance = 0.0;
+    double monthlyExpense = 0.0;
+    double monthlyEarnings = 0.0;
+    Map<String, double> categoryExpenses =
+        {}; // track category expenses separately
+
+    DateTime now = DateTime.now();
+    int currentMonth = now.month;
+    int currentYear = now.year;
+
+    for (var doc in transactionsSnapshot.docs) {
+      Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+
+      double amount = (data["amount"] ?? 0).toDouble();
+      bool isExpense = data["type"] == "Expense";
+      String category = data["category"] ?? "Other";
+      DateTime transactionDate = (data["date"] as Timestamp).toDate();
+
+      // Update balance: subtract for expenses, add for earnings
+      balance += isExpense ? -amount : amount;
+
+      // Check if transaction is from this month
+      if (transactionDate.month == currentMonth &&
+          transactionDate.year == currentYear) {
+        if (isExpense) {
+          monthlyExpense += amount;
+        } else {
+          monthlyEarnings += amount;
+        }
+      }
+
+      // Update category expenses for the pie chart
+      if (isExpense) {
+        categoryExpenses[category] = (categoryExpenses[category] ?? 0) + amount;
+      }
+    }
+
+    setState(() {
+      totalBalance = balance;
+      lastMonthExpense = monthlyExpense;
+      lastMonthEarnings = monthlyEarnings;
+      expenseByCategory =
+          categoryExpenses; // Update the state for the pie chart
+    });
+  }
+
+  Future<List<PieChartSectionData>> _fetchCategoryColors(
+      List<String> categories) async {
+    List<PieChartSectionData> sectionDataList = [];
+
+    for (String category in categories) {
+      Color categoryColor =
+          await CategoryService().getCategoryColorFromFirestore(category);
+
+      sectionDataList.add(
+        PieChartSectionData(
+          title: category,
+          value: expenseByCategory[category] ?? 0.0,
+          color: categoryColor,
+          titleStyle: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
+    }
+
+    return sectionDataList;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.backgroundColor,
-
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // User Greeting with Logout Button
+            const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  "Hello, $userName 👋",
+                  "Hello, ${userName.split(' ')[0]} ",
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 22,
@@ -60,7 +161,7 @@ class _HomePageState extends State<HomePage> {
 
             const SizedBox(height: 15),
 
-            // Overview Card
+            // **Overview Card**
             Card(
               color: AppColors.cardBackgroundColor,
               shape: RoundedRectangleBorder(
@@ -70,12 +171,10 @@ class _HomePageState extends State<HomePage> {
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   children: [
-                    const Text(
-                      "Total Balance",
-                      style: TextStyle(color: Colors.grey, fontSize: 16),
-                    ),
+                    const Text("Total Balance",
+                        style: TextStyle(color: Colors.grey, fontSize: 16)),
                     Text(
-                      "\$${totalBalance.toStringAsFixed(2)}",
+                      "₹${totalBalance.toStringAsFixed(2)}",
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 28,
@@ -86,8 +185,10 @@ class _HomePageState extends State<HomePage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        _buildSummaryTile("Expenses", lastMonthExpense, Colors.red),
-                        _buildSummaryTile("Earnings", lastMonthEarnings, Colors.green),
+                        _buildSummaryTile(
+                            "Expenses", lastMonthExpense, Colors.red),
+                        _buildSummaryTile(
+                            "Earnings", lastMonthEarnings, Colors.green),
                       ],
                     ),
                   ],
@@ -97,7 +198,7 @@ class _HomePageState extends State<HomePage> {
 
             const SizedBox(height: 20),
 
-            // Expense Chart
+            // **Expense Chart**
             Card(
               color: AppColors.backgroundColor,
               shape: RoundedRectangleBorder(
@@ -118,24 +219,46 @@ class _HomePageState extends State<HomePage> {
                     const SizedBox(height: 10),
                     SizedBox(
                       height: 180,
-                      child: PieChart(
-                        PieChartData(
-                          sections: expenseByCategory.entries.map((entry) {
-                            return PieChartSectionData(
-                              title: entry.key,
-                              value: entry.value,
-                              color: getCategoryColor(entry.key),
-                              titleStyle: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
+                      child: FutureBuilder<List<PieChartSectionData>>(
+                        // Fetch colors for each category before building the PieChart
+                        future: _fetchCategoryColors(
+                            expenseByCategory.keys.toList()),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return Center(child: CircularProgressIndicator());
+                          }
+
+                          if (snapshot.hasError) {
+                            return Center(child: Text('Error fetching data.'));
+                          }
+
+                          if (snapshot.hasData) {
+                            return PieChart(
+                              PieChartData(
+                                sections: snapshot.data!.map((sectionData) {
+                                  return PieChartSectionData(
+                                    title: sectionData
+                                        .title, // Category name as title
+                                    value: sectionData
+                                        .value, // Amount spent in the category
+                                    color: sectionData.color, // Category color
+                                    titleStyle: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  );
+                                }).toList(),
+                                borderData: FlBorderData(show: false),
+                                sectionsSpace: 2,
+                                centerSpaceRadius: 40,
                               ),
                             );
-                          }).toList(),
-                          borderData: FlBorderData(show: false),
-                          sectionsSpace: 2,
-                          centerSpaceRadius: 40,
-                        ),
+                          }
+
+                          return Center(child: Text('No data available.'));
+                        },
                       ),
                     ),
                   ],
@@ -145,12 +268,17 @@ class _HomePageState extends State<HomePage> {
 
             const SizedBox(height: 20),
 
-            // Transactions & Categories
+            // **Transactions & Categories**
             _buildNavigationButton(
               title: "Show All Transactions",
               icon: Icons.arrow_forward_ios_rounded,
               onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => AllTransactionsPage()));
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => AllTransactionsPage())).then((_) {
+                  fetchTransactions(); // Re-fetch data after returning from CategoryPage
+                });
               },
             ),
 
@@ -160,7 +288,11 @@ class _HomePageState extends State<HomePage> {
               title: "Manage Categories",
               icon: Icons.arrow_forward_ios_rounded,
               onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => CategoryPage()));
+                Navigator.push(context,
+                        MaterialPageRoute(builder: (context) => CategoryPage()))
+                    .then((_) {
+                  fetchTransactions(); // Re-fetch data after returning from CategoryPage
+                });
               },
             ),
 
@@ -168,10 +300,13 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
-
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => AddTransactionPage()));
+          Navigator.push(context,
+                  MaterialPageRoute(builder: (context) => AddTransactionPage()))
+              .then((_) {
+            fetchTransactions(); // Re-fetch data after returning from AddTransactionPage
+          });
         },
         backgroundColor: AppColors.primaryColor,
         child: const Icon(Icons.add, color: Colors.white, size: 28),
@@ -181,13 +316,13 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // Summary Card (Expenses & Earnings)
+  // Summary Tile for Expenses & Earnings
   Widget _buildSummaryTile(String title, double amount, Color color) {
     return Column(
       children: [
         Text(title, style: const TextStyle(color: Colors.grey, fontSize: 14)),
         Text(
-          "\$${amount.toStringAsFixed(2)}",
+          "\₹${amount.toStringAsFixed(2)}",
           style: TextStyle(
             color: color,
             fontSize: 20,
@@ -198,8 +333,11 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // Navigation Buttons (Transactions & Categories)
-  Widget _buildNavigationButton({required String title, required IconData icon, required VoidCallback onTap}) {
+// Navigation Buttons (Transactions & Categories)
+  Widget _buildNavigationButton(
+      {required String title,
+      required IconData icon,
+      required VoidCallback onTap}) {
     return GestureDetector(
       onTap: onTap,
       child: Card(
@@ -212,7 +350,8 @@ class _HomePageState extends State<HomePage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(title, style: const TextStyle(color: Colors.white, fontSize: 16)),
+              Text(title,
+                  style: const TextStyle(color: Colors.white, fontSize: 16)),
               Icon(icon, color: Colors.white),
             ],
           ),
@@ -222,16 +361,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   // Category Color Mapping
-  Color getCategoryColor(String category) {
-    switch (category) {
-      case "Food":
-        return AppColors.foodColor;
-      case "Rent":
-        return AppColors.rentColor;
-      case "Entertainment":
-        return AppColors.entertainmentColor;
-      default:
-        return Colors.grey;
-    }
+  Color getCategoryColor(String hexColor) {
+    // Convert the hex color string to a Color object
+    return Color(int.parse(hexColor.replaceFirst('#', '0xff')));
   }
 }

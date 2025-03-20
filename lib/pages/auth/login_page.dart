@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:my_finance/api/auth/auth_service.dart';
 import 'package:my_finance/helper/colors.dart';
+import 'package:my_finance/models/user_model.dart';
 
 class LoginPage extends StatefulWidget {
   @override
@@ -16,20 +17,16 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController confirmPasswordController =
       TextEditingController();
 
-  void _handleGoogleBtnClick() async {
-    await AuthService.signInWithGoogle(context);
-  }
-
   void _handleEmailAuth(BuildContext context) async {
     String email = emailController.text.trim();
     String password = passwordController.text.trim();
 
     if (isLogin) {
       // **Login Flow**
-      User? user = await AuthService.loginUser(email, password);
+      UserModel? user = await AuthService.loginUser(email, password);
       if (user == null) {
         _showSnackBar("User not found! Please register.");
-        setState(() => isLogin = false); // Switch to register mode
+        setState(() => isLogin = false);
       }
     } else {
       // **Register Flow**
@@ -48,7 +45,7 @@ class _LoginPageState extends State<LoginPage> {
       User? user = await AuthService.registerUser(email, password, name);
       if (user != null) {
         _showSuccessDialog("Registration successful! Please log in.");
-        setState(() => isLogin = true); // Switch to login mode
+        setState(() => isLogin = true);
       }
     }
   }
@@ -82,142 +79,104 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      //resizeToAvoidBottomInset: false,
       backgroundColor: AppColors.backgroundColor,
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
+      body: SafeArea(
         child: SingleChildScrollView(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              SizedBox(height: 130,),
-              // App Name / Logo
-              const Text(
-                "MyFinance",
-                style: TextStyle(
-                  color: Colors.cyanAccent,
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 50),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                    height: isLogin
+                        ? 230
+                        : 150), // Moves "MyFinance" up in register mode
 
-              // Full Name (Only in Register Mode)
-              if (!isLogin)
-                Column(
-                  children: [
-                    TextField(
-                      controller: nameController,
-                      style: TextStyle(color: Colors.white),
-                      decoration: _inputDecoration("Full Name"),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                ),
-
-              // Email
-              TextField(
-                controller: emailController,
-                style: TextStyle(color: Colors.white),
-                decoration: _inputDecoration("Email"),
-              ),
-              const SizedBox(height: 12),
-
-              // Password
-              TextField(
-                controller: passwordController,
-                obscureText: true,
-                style: TextStyle(color: Colors.white),
-                decoration: _inputDecoration("Password"),
-              ),
-              const SizedBox(height: 12),
-
-              // Confirm Password (Only in Register Mode)
-              if (!isLogin)
-                Column(
-                  children: [
-                    TextField(
-                      controller: confirmPasswordController,
-                      obscureText: true,
-                      style: TextStyle(color: Colors.white),
-                      decoration: _inputDecoration("Confirm Password"),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                ),
-
-              // Login / Register Button
-              ElevatedButton(
-                onPressed: () => _handleEmailAuth(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.cyanAccent,
-                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 40),
-                  shape: StadiumBorder(),
-                ),
-                child: Text(isLogin ? "Log in" : "Register",
-                    style: TextStyle(color: Colors.black, fontSize: 18)),
-              ),
-
-              const SizedBox(height: 30),
-
-              // OR Divider
-              const Row(
-                children: [
-                  Expanded(child: Divider(color: Colors.white30, thickness: 1)),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 10),
-                    child: Text("OR",
-                        style: TextStyle(color: Colors.white70, fontSize: 16)),
+                // App Name / Logo
+                const Text(
+                  "MyFinance",
+                  style: TextStyle(
+                    color: Colors.cyanAccent,
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
                   ),
-                  Expanded(child: Divider(color: Colors.white30, thickness: 1)),
-                ],
-              ),
-
-              const SizedBox(height: 30),
-
-              // Google Sign-In Button
-              ElevatedButton.icon(
-                onPressed: _handleGoogleBtnClick,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  side: BorderSide(color: Colors.grey.shade300),
-                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 25),
-                  shape: StadiumBorder(),
                 ),
-                icon: Image.asset('images/google_logo.png',
-                    height: 24, width: 24),
-                label: RichText(
-                  text: const TextSpan(
+                const SizedBox(height: 40),
+
+                // Form Fields
+                Form(
+                  child: Column(
                     children: [
-                      TextSpan(
-                        text: 'Log in using ',
-                        style: TextStyle(fontSize: 16, color: Colors.black),
+                      // Full Name (Only in Register Mode)
+                      if (!isLogin) ...[
+                        TextField(
+                          controller: nameController,
+                          style: TextStyle(color: Colors.white),
+                          decoration: _inputDecoration("Full Name"),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // Email
+                      TextField(
+                        controller: emailController,
+                        style: TextStyle(color: Colors.white),
+                        decoration: _inputDecoration("Email"),
                       ),
-                      TextSpan(
-                        text: 'Google',
-                        style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black),
+                      const SizedBox(height: 12),
+
+                      // Password
+                      TextField(
+                        controller: passwordController,
+                        obscureText: true,
+                        style: TextStyle(color: Colors.white),
+                        decoration: _inputDecoration("Password"),
                       ),
+                      const SizedBox(height: 12),
+
+                      // Confirm Password (Always on bottom in Register Mode)
+                      if (!isLogin) ...[
+                        TextField(
+                          controller: confirmPasswordController,
+                          obscureText: true,
+                          style: TextStyle(color: Colors.white),
+                          decoration: _inputDecoration("Confirm Password"),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                     ],
                   ),
                 ),
-              ),
 
-              const SizedBox(height: 20),
+                SizedBox(height: 20),
 
-              // Toggle Between Login & Register
-              TextButton(
-                onPressed: () => setState(() => isLogin = !isLogin),
-                child: Text(
-                  isLogin
-                      ? "Don't have an account? Register"
-                      : "Already registered? Log in",
-                  style: TextStyle(color: Colors.cyanAccent, fontSize: 16),
+                // Login / Register Button
+                ElevatedButton(
+                  onPressed: () => _handleEmailAuth(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.cyanAccent,
+                    padding: EdgeInsets.symmetric(vertical: 12, horizontal: 40),
+                    shape: StadiumBorder(),
+                  ),
+                  child: Text(isLogin ? "Log in" : "Register",
+                      style: TextStyle(color: Colors.black, fontSize: 18)),
                 ),
-              ),
-            ],
+
+                const SizedBox(height: 20),
+
+                // Toggle Between Login & Register
+                TextButton(
+                  onPressed: () => setState(() => isLogin = !isLogin),
+                  child: Text(
+                    isLogin
+                        ? "Don't have an account? Register"
+                        : "Already registered? Log in",
+                    style: TextStyle(color: Colors.cyanAccent, fontSize: 16),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

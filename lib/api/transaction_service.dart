@@ -1,13 +1,21 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:my_finance/models/transaction_model.dart';
 
 class TransactionService {
-  final CollectionReference _transactionCollection =
-      FirebaseFirestore.instance.collection('transactions');
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Fetch transactions as a stream (real-time updates)
+  // 🔹 Get current user ID
+  String get _userId => FirebaseAuth.instance.currentUser?.uid ?? "";
+
+  // 🔹 Fetch transactions as a stream (real-time updates)
   Stream<List<TransactionModel>> getTransactionsStream() {
-    return _transactionCollection
+    if (_userId.isEmpty) return const Stream.empty();
+
+    return _firestore
+        .collection('users')
+        .doc(_userId)
+        .collection('transactions')
         .orderBy('date', descending: true)
         .snapshots()
         .map((snapshot) {
@@ -18,13 +26,26 @@ class TransactionService {
     });
   }
 
-  // Add a new transaction
+  // 🔹 Add a new transaction
   Future<void> addTransaction(TransactionModel transaction) async {
-    await _transactionCollection.add(transaction.toMap());
+    if (_userId.isEmpty) return;
+
+    await _firestore
+        .collection('users')
+        .doc(_userId)
+        .collection('transactions')
+        .add(transaction.toMap());
   }
 
-  // Delete a transaction by ID
+  // 🔹 Delete a transaction by ID
   Future<void> deleteTransaction(String id) async {
-    await _transactionCollection.doc(id).delete();
+    if (_userId.isEmpty) return;
+
+    await _firestore
+        .collection('users')
+        .doc(_userId)
+        .collection('transactions')
+        .doc(id)
+        .delete();
   }
 }

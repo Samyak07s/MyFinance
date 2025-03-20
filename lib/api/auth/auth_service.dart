@@ -2,27 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:my_finance/helper/dialogs.dart';
+import 'package:my_finance/models/user_model.dart';
+import 'package:my_finance/models/transaction_model.dart';
+import 'package:my_finance/pages/home_screen.dart';
 
 class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // 🔹 Register a new user
-  static Future<User?> registerUser(
-      String email, String password, String name) async {
+  static Future<User?> registerUser(String email, String password, String name) async {
     try {
       UserCredential userCredential =
-          await _auth.createUserWithEmailAndPassword(
+          await _auth.createUserWithEmailAndPassword(email: email, password: password);
+
+      // Create user model with empty transactions & categories
+      UserModel newUser = UserModel(
+        id: userCredential.user!.uid,
         email: email,
-        password: password,
+        name: name,
+        balance: 0.0,
+        lastMonthIncome: 0.0,
+        lastMonthExpense: 0.0,
+        transactions: [],
+        categories: [],
       );
 
-      await _firestore.collection('users').doc(userCredential.user?.uid).set({
-        'name': name,
-        'email': email,
-        'uid': userCredential.user?.uid,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      await _firestore.collection('users').doc(userCredential.user!.uid).set(newUser.toMap());
 
       return userCredential.user;
     } catch (e) {
@@ -32,13 +39,18 @@ class AuthService {
   }
 
   // 🔹 Login user
-  static Future<User?> loginUser(String email, String password) async {
+  static Future<UserModel?> loginUser(String email, String password) async {
     try {
-      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      return userCredential.user;
+      UserCredential userCredential =
+          await _auth.signInWithEmailAndPassword(email: email, password: password);
+
+      DocumentSnapshot userDoc =
+          await _firestore.collection('users').doc(userCredential.user!.uid).get();
+
+      if (userDoc.exists) {
+        return UserModel.fromFirestore(userDoc.data() as Map<String, dynamic>, userCredential.user!.uid);
+      }
+      return null;
     } on FirebaseAuthException catch (e) {
       print('Error logging in: ${e.message}');
       return null;
@@ -48,75 +60,89 @@ class AuthService {
   // 🔹 Google Sign-In
   static Future<void> signInWithGoogle(BuildContext context) async {
     try {
+      Dialogs.showProgressBar(context);
+
       final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) return; // User canceled sign-in
+      if (googleUser == null) {
+        Navigator.pop(context);
+        return;
+      }
 
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-
-      final credential = GoogleAuthProvider.credential(
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final AuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      UserCredential userCredential =
-          await _auth.signInWithCredential(credential);
-      User? user = userCredential.user;
+      final UserCredential userCredential = await _auth.signInWithCredential(credential);
+      final User? user = userCredential.user;
 
-      if (user != null) {
-        // Check if the user has a display name
-        if (user.displayName == null || user.displayName!.isEmpty) {
-          _askForUserName(context, user);
-        } else {
-          print('User signed in: ${user.displayName}');
-        }
+      if (user == null) {
+        Navigator.pop(context);
+        Dialogs.showSnackbar(context, "Google Sign-In failed!");
+        return;
       }
+
+      // Check if user exists in Firestore
+      final doc = await _firestore.collection('users').doc(user.uid).get();
+      bool isNewUser = !doc.exists;
+
+      if (isNewUser) {
+        String? name = await _askForUserName(context);
+        if (name == null || name.trim().isEmpty) {
+          await _auth.signOut();
+          await GoogleSignIn().signOut();
+          Navigator.pop(context);
+          return;
+        }
+        await _saveUserToFirestore(user, name);
+      }
+
+      Navigator.pop(context);
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomePage()));
     } catch (e) {
-      print('Google Sign-In Error: $e');
+      Navigator.pop(context);
+      Dialogs.showSnackbar(context, "Google Sign-In failed: $e");
     }
   }
 
-  // 🔹 Show dialog to ask for user name
-  static void _askForUserName(BuildContext context, User user) {
+  /// Ask user for their name (only for first-time Google sign-in)
+  static Future<String?> _askForUserName(BuildContext context) async {
     TextEditingController nameController = TextEditingController();
 
-    showDialog(
+    return await showDialog<String>(
       context: context,
-      barrierDismissible: false, // Force user to enter name
-      builder: (context) {
-        return AlertDialog(
-          title: Text("Enter Your Name"),
-          content: TextField(
-            controller: nameController,
-            decoration: InputDecoration(hintText: "Your Name"),
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text("Enter Your Name"),
+        content: TextField(
+          controller: nameController,
+          decoration: const InputDecoration(hintText: "Your Name"),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, nameController.text.trim()),
+            child: const Text("Save"),
           ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                String name = nameController.text.trim();
-                if (name.isNotEmpty) {
-                  // Update Firebase Auth Profile
-                  await user.updateDisplayName(name);
-                  await user.reload();
-
-                  // Store in Firestore for future use
-                  await _firestore.collection("users").doc(user.uid).set({
-                    "name": name,
-                    "email": user.email,
-                    "uid": user.uid,
-                    "photoURL": user.photoURL,
-                  });
-
-                  Navigator.pop(context);
-                  print("Name saved: $name");
-                }
-              },
-              child: Text("Save"),
-            ),
-          ],
-        );
-      },
+        ],
+      ),
     );
+  }
+
+  /// Save new user data to Firestore
+  static Future<void> _saveUserToFirestore(User user, String name) async {
+    UserModel newUser = UserModel(
+      id: user.uid,
+      email: user.email ?? "",
+      name: name,
+      balance: 0.0,
+      lastMonthIncome: 0.0,
+      lastMonthExpense: 0.0,
+      transactions: [],
+      categories: [],
+    );
+
+    await _firestore.collection('users').doc(user.uid).set(newUser.toMap());
   }
 
   // 🔹 Logout user
@@ -142,7 +168,14 @@ class AuthService {
   }
 
   // 🔹 Get current user
-  static User? getCurrentUser() {
-    return _auth.currentUser;
+  static Future<UserModel?> getCurrentUser() async {
+    User? firebaseUser = _auth.currentUser;
+    if (firebaseUser == null) return null;
+
+    DocumentSnapshot userDoc = await _firestore.collection('users').doc(firebaseUser.uid).get();
+    if (userDoc.exists) {
+      return UserModel.fromFirestore(userDoc.data() as Map<String, dynamic>, firebaseUser.uid);
+    }
+    return null;
   }
 }
